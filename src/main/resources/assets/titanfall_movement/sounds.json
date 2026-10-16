@@ -1,0 +1,42 @@
+{
+	"wallrun_start": {
+		"sounds": [
+			"titanfall_movement:movement/wallrun_start"
+		]
+	},
+	"wallrun_loop": {
+		"sounds": [
+			"titanfall_movement:movement/wallrun_loop"
+		]
+	},
+	"walljump": {
+		"sounds": [
+			"titanfall_movement:movement/walljump"
+		]
+	},
+	"slide_start": {
+		"sounds": [
+			"titanfall_movement:movement/slide_start"
+		]
+	},
+	"slide_loop": {
+		"sounds": [
+			"titanfall_movement:movement/slide_loop"
+		]
+	},
+	"jump": {
+		"sounds": [
+			"titanfall_movement:movement/jump"
+		]
+	},
+	"double_jump": {
+		"sounds": [
+			"titanfall_movement:movement/double_jump"
+		]
+	},
+	"land": {
+		"sounds": [
+			"titanfall_movement:movement/land"
+		]
+	}
+}

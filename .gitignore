@@ -38,3 +38,7 @@ hs_err_*.log
 replay_*.log
 *.hprof
 *.jfr
+
+# titanfall 2 audio (copyrighted game assets, keep them local)
+
+src/main/resources/assets/titanfall_movement/sounds/movement/*.ogg
