@@ -21,7 +21,7 @@ import java.nio.file.StandardCopyOption;
  */
 public class TitanfallConfig {
 	/** Bumped whenever field meanings change, so an old file is backed up instead of misread. */
-	public static final int CURRENT_VERSION = 2;
+	public static final int CURRENT_VERSION = 3;
 
 	public int configVersion = CURRENT_VERSION;
 
@@ -42,27 +42,61 @@ public class TitanfallConfig {
 	// --- wall running ---
 	/** 35 ticks is the ~1.75 s wall run documented for Titanfall 2. */
 	public int wallRunMaxTicks = 35;
-	/** Net vertical speed per tick during a run, blocks/tick. 0 is a flat glide with zero gravity penalty. */
+	/** Vertical speed a run starts at, blocks/tick. 0 starts flat. */
 	public double wallRunVerticalVelocity = 0.0;
+	/**
+	 * Downward acceleration during a run, blocks/s^2. Wall runs are documented as a gradual pull down
+	 * rather than a gravity-free glide, so a run sinks a little as it goes.
+	 */
+	public double wallRunFall = 2.0;
+	/** Speed a run gains, blocks/s^2: Respawn describe wall running itself as a boost. */
+	public double wallRunAccel = 2.0;
+	/** Speed a run accelerates up to, blocks/s. A pilot who arrived faster than this is not braked. */
+	public double wallRunMaxSpeed = 15.0;
+	/** Fraction of the entry speed the run keeps when latching: 1.0 keeps all of it. */
+	public double wallRunSpeedRetain = 1.0;
+	/** Ticks the run direction takes to curve onto the wall; 1 snaps, higher values arc. */
+	public int wallRunAlignTicks = 2;
+	/** Ticks a run survives with no wall in reach, so sampling cannot flicker it on and off. */
+	public int wallDetachGraceTicks = 2;
 	/** Wall jump push away from the wall, blocks/s. */
 	public double wallJumpPush = 3.0;
 	/** Wall jump upward impulse, blocks/tick (0.42 is the vanilla jump). */
 	public double wallJumpUp = 0.42;
-	/** 1.0 preserves 100% of the wall-run speed through the kick, above 1.0 adds a boost. */
+	/** 1.0 carries 100% of the run's speed through the kick; above 1.0 adds a boost. */
 	public double wallJumpMomentum = 1.0;
 	public int wallCooldownTicks = 6;
 
-	// --- sliding ---
-	/** Small start boost, as a fraction of the entry speed. */
+	// --- sliding, and the carry that follows it ---
+	/** Small start boost, as a fraction of the entry speed. Only this is on the boost cooldown. */
 	public double slideEntryBoost = 0.1;
-	/** Source-style friction coefficient; higher scrubs speed faster. */
-	public double slideFriction = 0.35;
-	/** Minimum speed to start a slide, blocks/s. */
-	public double slideMinSpeed = 3.0;
+	/**
+	 * Source-style friction coefficient for a slide; higher scrubs speed faster. At this value the ground
+	 * contact of a hop costs about 5% of the pilot's speed, and a slide from a boosted sprint spends its
+	 * extra speed over roughly a second and a half, which is the documented shape: hopping promptly is
+	 * what keeps momentum, and staying grounded longer costs more of it.
+	 */
+	public double slideFriction = 0.25;
+	/** Minimum speed to start a slide, blocks/s. 4.3 is vanilla walking, so a crouch-walk cannot slide. */
+	public double slideMinSpeed = 4.3;
 	/** 1.0 carries 100% of the slide's velocity into the air on a slide hop. */
 	public double slideHopMomentum = 1.0;
-	/** Ticks before another slide boost is allowed; 40 ticks is the 2 s timer Titanfall 2 uses. */
+	/** Ticks before another slide entry boost is allowed; 40 ticks is the 2 s timer Titanfall 2 uses. */
 	public int slideBoostCooldownTicks = 40;
+	/**
+	 * Steering while sliding, blocks/s^2. A slide keeps the speed brought into it but takes away most
+	 * of the pilot's ability to stop or turn, so a held direction bends the momentum slowly.
+	 */
+	public double slideSteer = 2.0;
+	/** Friction of the momentum carry that a slide turns into when it ends, Source-style coefficient. */
+	public double carryFriction = 0.25;
+	/** Steering during the carry, blocks/s^2. */
+	public double carrySteer = 6.0;
+	/**
+	 * Speed at which the carry hands the pilot back to vanilla ground movement, blocks/s. 4.3 is vanilla
+	 * walking, so control returns at the speed vanilla can already walk, without a visible slow-down.
+	 */
+	public double carryEndSpeed = 4.3;
 
 	// --- jumping ---
 	/**

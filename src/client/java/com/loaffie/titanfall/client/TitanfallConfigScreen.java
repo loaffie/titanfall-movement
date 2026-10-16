@@ -43,6 +43,12 @@ public class TitanfallConfigScreen extends Screen {
 		slider("Air Gravity", 0.0, 1.5, config.airGravityScale, value -> config.airGravityScale = value);
 		whole("Wall Run Ticks", 5.0, 100.0, config.wallRunMaxTicks, value -> config.wallRunMaxTicks = (int) value);
 		slider("Wall Vertical", -0.2, 0.2, config.wallRunVerticalVelocity, value -> config.wallRunVerticalVelocity = value);
+		slider("Wall Fall", 0.0, 8.0, config.wallRunFall, value -> config.wallRunFall = value);
+		slider("Wall Accel", 0.0, 20.0, config.wallRunAccel, value -> config.wallRunAccel = value);
+		slider("Wall Max Speed", 5.0, 30.0, config.wallRunMaxSpeed, value -> config.wallRunMaxSpeed = value);
+		slider("Wall Speed Keep", 0.5, 1.5, config.wallRunSpeedRetain, value -> config.wallRunSpeedRetain = value);
+		whole("Wall Align Ticks", 1.0, 20.0, config.wallRunAlignTicks, value -> config.wallRunAlignTicks = (int) value);
+		whole("Wall Detach Grace", 0.0, 10.0, config.wallDetachGraceTicks, value -> config.wallDetachGraceTicks = (int) value);
 		slider("Wall Jump Push", 0.0, 15.0, config.wallJumpPush, value -> config.wallJumpPush = value);
 		slider("Wall Jump Up", 0.0, 0.8, config.wallJumpUp, value -> config.wallJumpUp = value);
 		slider("Wall Momentum", 0.5, 2.0, config.wallJumpMomentum, value -> config.wallJumpMomentum = value);
@@ -52,6 +58,10 @@ public class TitanfallConfigScreen extends Screen {
 		slider("Slide Min Speed", 0.0, 15.0, config.slideMinSpeed, value -> config.slideMinSpeed = value);
 		slider("Slide Hop Mom.", 0.5, 1.5, config.slideHopMomentum, value -> config.slideHopMomentum = value);
 		whole("Slide Cooldown", 0.0, 100.0, config.slideBoostCooldownTicks, value -> config.slideBoostCooldownTicks = (int) value);
+		slider("Slide Steer", 0.0, 20.0, config.slideSteer, value -> config.slideSteer = value);
+		slider("Carry Friction", 0.0, 2.0, config.carryFriction, value -> config.carryFriction = value);
+		slider("Carry Steer", 0.0, 20.0, config.carrySteer, value -> config.carrySteer = value);
+		slider("Carry End Speed", 0.0, 10.0, config.carryEndSpeed, value -> config.carryEndSpeed = value);
 		slider("Double Jump", 0.0, 0.8, config.doubleJumpVelocity, value -> config.doubleJumpVelocity = value);
 		slider("Lurch Push", 0.0, 8.0, config.lurchSpeed, value -> config.lurchSpeed = value);
 		whole("Lurch Ticks", 0.0, 20.0, config.lurchTicks, value -> config.lurchTicks = (int) value);
