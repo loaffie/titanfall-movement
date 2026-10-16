@@ -5,6 +5,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.option.GameOptions;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
@@ -44,8 +45,10 @@ public final class TitanfallController {
 	private static final double WALL_RUN_MIN_SPEED = 5.0;
 	/** A wall only counts when the player travels more than ~45 degrees away from its normal. */
 	private static final double WALL_ALIGNMENT_LIMIT = 0.7;
-	/** How close to the wall face the player has to be, in blocks. */
-	private static final double WALL_REACH = 0.5;
+	/** How far the player's hitbox may be from the wall surface and still latch, in blocks. */
+	private static final double WALL_REACH = 0.25;
+	/** Speed a knockback or explosion has to add before the model gives up its own momentum. */
+	private static final double EXTERNAL_IMPULSE_THRESHOLD = 0.75;
 	/** Source sv_stopspeed (100 units/s) as blocks per second, used by slide friction. */
 	private static final double SLIDE_STOP_SPEED = 100.0 * SOURCE_UNIT;
 	private static final double LAND_FALL_DISTANCE = 1.0;
@@ -78,6 +81,8 @@ public final class TitanfallController {
 	private static boolean sliding;
 	private static Vec3d slideVelocity = Vec3d.ZERO;
 	private static int slideBoostCooldown;
+	/** Set when a slide hop has already played the jump sound, so leaving the ground does not repeat it. */
+	private static boolean jumpSoundPlayed;
 
 	private TitanfallController() {
 	}
@@ -144,6 +149,7 @@ public final class TitanfallController {
 	/** States the pilot movement has no business touching: vehicles, flight, swimming, ladders and spectator. */
 	private static boolean movementUnsuitable(ClientPlayerEntity player) {
 		return player.isSpectator()
+				|| player.isDead()
 				|| player.hasVehicle()
 				|| player.isSleeping()
 				|| player.getAbilities().flying
@@ -163,8 +169,19 @@ public final class TitanfallController {
 			stopSlide();
 		} else if (!airborne) {
 			// Just left the ground: undo the air drag that vanilla applied after this tick's jump.
-			momentum = horizontal(player.getVelocity()).multiply(TICKS_PER_SECOND / AIR_DRAG);
+			Vec3d velocity = player.getVelocity();
+			momentum = horizontal(velocity).multiply(TICKS_PER_SECOND / AIR_DRAG);
+
+			// Rising rather than dropping off a ledge means a real ground jump. Vanilla plays no sound of
+			// its own for a player jump, so this is the only thing that announces one.
+			if (velocity.y > 0.0 && !jumpSoundPlayed) {
+				MovementSounds.jump();
+			}
+		} else {
+			momentum = adoptExternalImpulse(player);
 		}
+
+		jumpSoundPlayed = false;
 
 		if (wallRunning) {
 			if (jumpEdge) {
@@ -241,18 +258,39 @@ public final class TitanfallController {
 	 */
 	private static void airAccelerate(ClientPlayerEntity player, GameOptions options) {
 		Vec3d wishDir = wishDirection(player, options);
-		if (wishDir != null) {
+		// Acceleration tops out at the configured cap. A speed already above it - a lurch, an explosion,
+		// a fast wall run - is left alone rather than braked back down to the cap.
+		if (wishDir != null && momentum.length() < config.maxHorizontalSpeed) {
 			double wishSpeed = config.maxHorizontalSpeed;
 			double wishSpd = Math.min(wishSpeed, config.airWishSpeedCap);
 			double currentSpeed = momentum.x * wishDir.x + momentum.z * wishDir.z;
 			double addSpeed = wishSpd - currentSpeed;
 			if (addSpeed > 0.0) {
 				double accelSpeed = Math.min(config.airAccelerate * wishSpeed * TICK_SECONDS, addSpeed);
-				momentum = momentum.add(wishDir.multiply(accelSpeed));
+				Vec3d accelerated = momentum.add(wishDir.multiply(accelSpeed));
+				double ceiling = config.maxHorizontalSpeed;
+				double speed = accelerated.length();
+				momentum = speed > ceiling ? accelerated.multiply(ceiling / speed) : accelerated;
 			}
 		}
 
 		writeAirVelocity(player);
+	}
+
+	/**
+	 * The model owns the pilot's momentum, but knockback, explosions, pistons and riding entities still
+	 * push them. If the velocity vanilla has been left holding carries more speed than our own value in
+	 * the direction it points, it came from outside the model and is adopted instead of being erased.
+	 */
+	private static Vec3d adoptExternalImpulse(ClientPlayerEntity player) {
+		Vec3d observed = horizontal(player.getVelocity()).multiply(TICKS_PER_SECOND);
+		double observedSpeed = observed.length();
+		if (observedSpeed < EXTERNAL_IMPULSE_THRESHOLD) {
+			return momentum;
+		}
+
+		double alignment = momentum.dotProduct(observed.multiply(1.0 / observedSpeed));
+		return observedSpeed > alignment + EXTERNAL_IMPULSE_THRESHOLD ? observed : momentum;
 	}
 
 	/** Writes our momentum back, optionally leaving some gravity undone for a floatier arc. */
@@ -325,6 +363,7 @@ public final class TitanfallController {
 	private static void slideHop(ClientPlayerEntity player) {
 		momentum = slideVelocity.multiply(config.slideHopMomentum);
 		stopSlide();
+		jumpSoundPlayed = true;
 		MovementSounds.jump();
 		player.setVelocity(momentum.x / TICKS_PER_SECOND, JUMP_VELOCITY, momentum.z / TICKS_PER_SECOND);
 	}
@@ -420,15 +459,23 @@ public final class TitanfallController {
 		return !world.getBlockState(pos).getCollisionShape(world, pos).isEmpty();
 	}
 
+	/**
+	 * Gap between the player's hitbox and the wall surface, in blocks. Measuring from the hitbox rather
+	 * than the entity's centre is what makes latching reliable: the centre-based version only accepted a
+	 * ~0.2 block window at the very edge of the player's own block, so wall runs only started when the
+	 * player was already pressed against the wall.
+	 */
 	private static double distanceToWall(ClientPlayerEntity player, Direction side) {
+		Box box = player.getBoundingBox();
 		BlockPos pos = player.getBlockPos();
-		return switch (side) {
-			case EAST -> pos.getX() + 1.0 - player.getX();
-			case WEST -> player.getX() - pos.getX();
-			case SOUTH -> pos.getZ() + 1.0 - player.getZ();
-			case NORTH -> player.getZ() - pos.getZ();
+		double gap = switch (side) {
+			case EAST -> pos.getX() + 1.0 - box.maxX;
+			case WEST -> box.minX - pos.getX();
+			case SOUTH -> pos.getZ() + 1.0 - box.maxZ;
+			case NORTH -> box.minZ - pos.getZ();
 			default -> Double.MAX_VALUE;
 		};
+		return Math.max(gap, 0.0);
 	}
 
 	/** Unit tangent of the wall, flipped to point the way the player is already travelling. */
@@ -447,6 +494,19 @@ public final class TitanfallController {
 
 	private static Vec3d horizontal(Vec3d velocity) {
 		return new Vec3d(velocity.x, 0.0, velocity.z);
+	}
+
+	/**
+	 * True while this controller is the authority on the player's horizontal velocity, used by the
+	 * travel mixin to stop vanilla adding its own input acceleration on top of the modelled movement.
+	 */
+	public static boolean ownsMovement(ClientPlayerEntity player) {
+		return started && !movementUnsuitable(player) && (airborne || sliding);
+	}
+
+	/** True while the player is in a controller-driven slide, used to let a slide leave a ledge. */
+	public static boolean isSliding(ClientPlayerEntity player) {
+		return started && sliding && !movementUnsuitable(player);
 	}
 
 	private static void reset() {
@@ -468,6 +528,7 @@ public final class TitanfallController {
 		sliding = false;
 		slideVelocity = Vec3d.ZERO;
 		slideBoostCooldown = 0;
+		jumpSoundPlayed = false;
 		MovementSounds.clear();
 	}
 }

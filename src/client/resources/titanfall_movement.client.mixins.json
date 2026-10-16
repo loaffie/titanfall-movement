@@ -1,0 +1,12 @@
+{
+	"required": true,
+	"package": "com.loaffie.titanfall.mixin.client",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"LivingEntityTravelMixin",
+		"PlayerEntitySneakMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}
