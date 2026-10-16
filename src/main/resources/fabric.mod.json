@@ -13,11 +13,12 @@
 	"license": "CC0-1.0",
 	"icon": "assets/titanfall_movement/icon.png",
 	"environment": "client",
-	"mixins": {
-		"client": [
-			"titanfall_movement.client.mixins.json"
-		]
-	},
+	"mixins": [
+		{
+			"config": "titanfall_movement.client.mixins.json",
+			"environment": "client"
+		}
+	],
 	"entrypoints": {
 		"main": [
 			"com.loaffie.titanfall.TitanfallMovement"
