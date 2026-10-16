@@ -83,6 +83,9 @@ public final class TitanfallController {
 	private static int slideBoostCooldown;
 	/** Set when a slide hop has already played the jump sound, so leaving the ground does not repeat it. */
 	private static boolean jumpSoundPlayed;
+	/** Remaining ticks of the post-jump lurch window, and how much push is left in it. */
+	private static int lurchTicksLeft;
+	private static double lurchBudget;
 
 	private TitanfallController() {
 	}
@@ -174,8 +177,12 @@ public final class TitanfallController {
 
 			// Rising rather than dropping off a ledge means a real ground jump. Vanilla plays no sound of
 			// its own for a player jump, so this is the only thing that announces one.
-			if (velocity.y > 0.0 && !jumpSoundPlayed) {
-				MovementSounds.jump();
+			if (velocity.y > 0.0) {
+				if (!jumpSoundPlayed) {
+					MovementSounds.jump();
+				}
+
+				startLurch();
 			}
 		} else {
 			momentum = adoptExternalImpulse(player);
@@ -200,10 +207,17 @@ public final class TitanfallController {
 			}
 		}
 
+		// A wall bump - crouch held against a wall while airborne - is how Titanfall 2 hands the air jump
+		// back without landing.
+		if (config.airJumpOnWallBump && doubleJumped && player.isSneaking() && touchingWall(player)) {
+			doubleJumped = false;
+		}
+
 		if (jumpEdge && airborne && !doubleJumped) {
 			doubleJump(player);
 		}
 
+		applyLurch(player, options);
 		airAccelerate(player, options);
 	}
 
@@ -301,8 +315,15 @@ public final class TitanfallController {
 				momentum.z / TICKS_PER_SECOND);
 	}
 
+	/**
+	 * The air jump. Like the ground jump it <em>resets</em> the vertical speed to the jump impulse rather
+	 * than adding to it, so jumping at the top of an arc gives a full second jump, and it keeps every bit
+	 * of the horizontal momentum. It opens its own lurch window, which is what makes an air jump usable
+	 * for a sharp redirect and not just extra height.
+	 */
 	private static void doubleJump(ClientPlayerEntity player) {
 		doubleJumped = true;
+		startLurch();
 		MovementSounds.doubleJump();
 		player.setVelocity(momentum.x / TICKS_PER_SECOND, config.doubleJumpVelocity, momentum.z / TICKS_PER_SECOND);
 	}
@@ -314,7 +335,10 @@ public final class TitanfallController {
 		// Keep only the component travelling along the wall face; the part heading into the wall is
 		// dropped, and nothing else about the entry speed is touched.
 		wallRunSpeed = wallTangent(wall, momentum).dotProduct(momentum);
-		doubleJumped = false;
+		if (config.airJumpOnWallRun) {
+			doubleJumped = false;
+		}
+
 		MovementSounds.startWallRun();
 		continueWallRun(player);
 	}
@@ -341,6 +365,7 @@ public final class TitanfallController {
 		MovementSounds.wallJump();
 		momentum = tangent.multiply(wallRunSpeed * config.wallJumpMomentum)
 				.add(new Vec3d(-wallSide.getOffsetX() * config.wallJumpPush, 0.0, -wallSide.getOffsetZ() * config.wallJumpPush));
+		startLurch();
 		stopWallRun();
 		player.setVelocity(momentum.x / TICKS_PER_SECOND, config.wallJumpUp, momentum.z / TICKS_PER_SECOND);
 	}
@@ -363,6 +388,7 @@ public final class TitanfallController {
 	private static void slideHop(ClientPlayerEntity player) {
 		momentum = slideVelocity.multiply(config.slideHopMomentum);
 		stopSlide();
+		startLurch();
 		jumpSoundPlayed = true;
 		MovementSounds.jump();
 		player.setVelocity(momentum.x / TICKS_PER_SECOND, JUMP_VELOCITY, momentum.z / TICKS_PER_SECOND);
@@ -488,6 +514,54 @@ public final class TitanfallController {
 		return tangent;
 	}
 
+	/**
+	 * Opens the lurch window that every jump gets: for the next few ticks a small push is applied toward
+	 * whatever direction the player is holding, and the push follows the input rather than being fixed at
+	 * the moment of the jump. Titanfall 2's lurch is documented as "the small push you get toward your
+	 * movement direction right after a jump (~0.35s window)", and the same sources note that holding both
+	 * strafe directions cancels it, which {@link #applyLurch} reproduces.
+	 */
+	private static void startLurch() {
+		lurchTicksLeft = config.lurchTicks;
+		lurchBudget = config.lurchSpeed;
+	}
+
+	/** Adds this tick's slice of the lurch budget along the current wish direction. */
+	private static void applyLurch(ClientPlayerEntity player, GameOptions options) {
+		if (lurchTicksLeft <= 0 || lurchBudget <= 0.0) {
+			return;
+		}
+
+		lurchTicksLeft--;
+
+		// Opposing strafe input cancels the strafe and with it the lurch.
+		if (options.leftKey.isPressed() && options.rightKey.isPressed()) {
+			return;
+		}
+
+		Vec3d wishDir = wishDirection(player, options);
+		if (wishDir == null) {
+			return;
+		}
+
+		double step = Math.min(lurchBudget, config.lurchSpeed / Math.max(1, config.lurchTicks));
+		momentum = momentum.add(wishDir.multiply(step));
+		lurchBudget -= step;
+	}
+
+	/** True when any horizontal face of the player's block is a wall within reach, at any height. */
+	private static boolean touchingWall(ClientPlayerEntity player) {
+		World world = player.getEntityWorld();
+		for (Direction side : Direction.Type.HORIZONTAL) {
+			BlockPos pos = player.getBlockPos().offset(side);
+			if (isWallBlock(world, pos) && distanceToWall(player, side) <= WALL_REACH) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	private static Vec3d position(ClientPlayerEntity player) {
 		return new Vec3d(player.getX(), player.getY(), player.getZ());
 	}
@@ -529,6 +603,8 @@ public final class TitanfallController {
 		slideVelocity = Vec3d.ZERO;
 		slideBoostCooldown = 0;
 		jumpSoundPlayed = false;
+		lurchTicksLeft = 0;
+		lurchBudget = 0.0;
 		MovementSounds.clear();
 	}
 }

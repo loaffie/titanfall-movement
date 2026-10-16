@@ -64,8 +64,21 @@ public class TitanfallConfig {
 	/** Ticks before another slide boost is allowed; 40 ticks is the 2 s timer Titanfall 2 uses. */
 	public int slideBoostCooldownTicks = 40;
 
-	// --- misc ---
+	// --- jumping ---
+	/**
+	 * The air jump's own vertical impulse, blocks/tick. It resets the vertical speed rather than adding
+	 * to it, exactly like a ground jump, so a second jump at the apex of an arc gives the full amount.
+	 */
 	public double doubleJumpVelocity = 0.42;
+	/** Total push a lurch can add, blocks/s. It follows the held direction instead of being fixed at the
+	 *  moment of the jump, which is what allows a jump to be used to redirect momentum. */
+	public double lurchSpeed = 2.0;
+	/** Length of the lurch window in ticks; 7 ticks is the ~0.35 s window Titanfall 2 uses. */
+	public int lurchTicks = 7;
+	/** Whether attaching to a wall gives the air jump back. */
+	public boolean airJumpOnWallRun = true;
+	/** Whether crouching against a wall mid-air (a wall bump) gives the air jump back. */
+	public boolean airJumpOnWallBump = true;
 	public boolean soundsEnabled = true;
 	public double movementVolume = 1.0;
 

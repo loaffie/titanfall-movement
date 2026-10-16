@@ -4,12 +4,14 @@ import com.loaffie.titanfall.config.TitanfallConfig;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.ClickableWidget;
 import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.text.Text;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.BooleanSupplier;
 import java.util.function.DoubleConsumer;
 
 /**
@@ -51,9 +53,14 @@ public class TitanfallConfigScreen extends Screen {
 		slider("Slide Hop Mom.", 0.5, 1.5, config.slideHopMomentum, value -> config.slideHopMomentum = value);
 		whole("Slide Cooldown", 0.0, 100.0, config.slideBoostCooldownTicks, value -> config.slideBoostCooldownTicks = (int) value);
 		slider("Double Jump", 0.0, 0.8, config.doubleJumpVelocity, value -> config.doubleJumpVelocity = value);
+		slider("Lurch Push", 0.0, 8.0, config.lurchSpeed, value -> config.lurchSpeed = value);
+		whole("Lurch Ticks", 0.0, 20.0, config.lurchTicks, value -> config.lurchTicks = (int) value);
+		toggle("Air Jump / Wall Run", () -> config.airJumpOnWallRun, () -> config.airJumpOnWallRun = !config.airJumpOnWallRun);
+		toggle("Air Jump / Wall Bump", () -> config.airJumpOnWallBump, () -> config.airJumpOnWallBump = !config.airJumpOnWallBump);
+		toggle("Sounds", () -> config.soundsEnabled, () -> config.soundsEnabled = !config.soundsEnabled);
 		slider("Volume", 0.0, 1.0, config.movementVolume, value -> config.movementVolume = value);
 
-		int gridBottom = this.height - 27 - 26;
+		int gridBottom = this.height - 27 - 6;
 		int columns = 2;
 		while (columns < 4 && TOP + perColumn(columns) * MAX_ROW_HEIGHT > gridBottom) {
 			columns++;
@@ -67,16 +74,11 @@ public class TitanfallConfigScreen extends Screen {
 		int startX = Math.max(5, (this.width - gridWidth) / 2);
 
 		for (int index = 0; index < rows.size(); index++) {
+			Row row = rows.get(index);
 			int x = startX + (index / perColumn) * (columnWidth + GAP);
 			int y = TOP + (index % perColumn) * rowHeight;
-			addDrawableChild(new ConfigSlider(x, y, columnWidth, widgetHeight, rows.get(index)));
+			addDrawableChild(widget(row, x, y, columnWidth, widgetHeight));
 		}
-
-		int buttonY = Math.min(this.height - 27 - 24, TOP + perColumn * rowHeight + 2);
-		addDrawableChild(ButtonWidget.builder(soundsLabel(), button -> {
-			config.soundsEnabled = !config.soundsEnabled;
-			button.setMessage(soundsLabel());
-		}).dimensions(startX, buttonY, columnWidth, 20).build());
 
 		addDrawableChild(ButtonWidget.builder(Text.literal("Done"), button -> close()).dimensions(this.width / 2 - 50, this.height - 27, 100, 20).build());
 	}
@@ -87,23 +89,44 @@ public class TitanfallConfigScreen extends Screen {
 		MinecraftClient.getInstance().setScreen(parent);
 	}
 
+	private ClickableWidget widget(Row row, int x, int y, int width, int height) {
+		if (row.kind() == Kind.TOGGLE) {
+			return ButtonWidget.builder(toggleLabel(row), button -> {
+				row.toggle().run();
+				button.setMessage(toggleLabel(row));
+			}).dimensions(x, y, width, height).build();
+		}
+
+		return new ConfigSlider(x, y, width, height, row);
+	}
+
+	private Text toggleLabel(Row row) {
+		return Text.literal(row.label() + ": " + (row.getter().getAsBoolean() ? "ON" : "OFF"));
+	}
+
 	private int perColumn(int columns) {
 		return (rows.size() + columns - 1) / columns;
 	}
 
-	private Text soundsLabel() {
-		return Text.literal("Sounds: " + (config.soundsEnabled ? "ON" : "OFF"));
-	}
-
 	private void slider(String label, double min, double max, double value, DoubleConsumer setter) {
-		rows.add(new Row(label, min, max, value, false, setter));
+		rows.add(new Row(label, min, max, value, Kind.SLIDER, setter, null, null));
 	}
 
 	private void whole(String label, double min, double max, double value, DoubleConsumer setter) {
-		rows.add(new Row(label, min, max, value, true, setter));
+		rows.add(new Row(label, min, max, value, Kind.WHOLE, setter, null, null));
 	}
 
-	private record Row(String label, double min, double max, double value, boolean whole, DoubleConsumer setter) {
+	private void toggle(String label, BooleanSupplier getter, Runnable toggle) {
+		rows.add(new Row(label, 0.0, 1.0, 0.0, Kind.TOGGLE, null, getter, toggle));
+	}
+
+	private enum Kind {
+		SLIDER,
+		WHOLE,
+		TOGGLE
+	}
+
+	private record Row(String label, double min, double max, double value, Kind kind, DoubleConsumer setter, BooleanSupplier getter, Runnable toggle) {
 	}
 
 	private static class ConfigSlider extends SliderWidget {
@@ -118,14 +141,14 @@ public class TitanfallConfigScreen extends Screen {
 		@Override
 		protected void updateMessage() {
 			double current = current();
-			String text = row.whole() ? Integer.toString((int) Math.round(current)) : String.format(Locale.ROOT, "%.2f", current);
+			String text = row.kind() == Kind.WHOLE ? Integer.toString((int) Math.round(current)) : String.format(Locale.ROOT, "%.2f", current);
 			setMessage(Text.literal(row.label() + ": " + text));
 		}
 
 		@Override
 		protected void applyValue() {
 			double current = current();
-			row.setter().accept(row.whole() ? Math.round(current) : current);
+			row.setter().accept(row.kind() == Kind.WHOLE ? Math.round(current) : current);
 		}
 
 		private double current() {
